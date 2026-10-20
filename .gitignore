@@ -1,0 +1,3 @@
+*.pass
+config.toml
+__pycache__/

@@ -1,0 +1,95 @@
+# himalaya v2 — multi-account mail for the agent
+#
+# Secrets live in ~/.hermes/email/<account>.pass (chmod 600), written with
+# `~/.hermes/email/setpass <account>`. Never inline a password in this file.
+#
+# Replace every ADDRESS and EXAMPLE.COM placeholder before use.
+
+# ---------------------------------------------------------------------------
+# Gmail — needs an App Password (2FA must be on); the account password is refused.
+# Gmail files its own sent copy, so no message.send.save-copy.
+# ---------------------------------------------------------------------------
+[accounts.gmail]
+default = true
+email = "ADDRESS@gmail.com"
+display-name = ""
+imap.server = "imaps://imap.gmail.com:993"
+imap.sasl.plain.username = "ADDRESS@gmail.com"
+imap.sasl.plain.password.command = "cat ~/.hermes/email/gmail.pass"
+smtp.server = "smtp://smtp.gmail.com:587"
+smtp.starttls = true
+smtp.sasl.plain.username = "ADDRESS@gmail.com"
+smtp.sasl.plain.password.command = "cat ~/.hermes/email/gmail.pass"
+mailbox.alias.sent = "[Gmail]/Sent Mail"
+mailbox.alias.drafts = "[Gmail]/Drafts"
+mailbox.alias.trash = "[Gmail]/Trash"
+
+# ---------------------------------------------------------------------------
+# QQ Mail — needs the 16-char 授权码, not the login password.
+# Needs the IMAP ID exchange straight after login.
+# ---------------------------------------------------------------------------
+[accounts.qq]
+email = "ADDRESS@qq.com"
+imap.server = "imaps://imap.qq.com:993"
+imap.sasl.plain.username = "ADDRESS@qq.com"
+imap.sasl.plain.password.command = "cat ~/.hermes/email/qq.pass"
+imap.id.auto = true
+smtp.server = "smtps://smtp.qq.com:465"
+smtp.sasl.plain.username = "ADDRESS@qq.com"
+smtp.sasl.plain.password.command = "cat ~/.hermes/email/qq.pass"
+
+# ---------------------------------------------------------------------------
+# 126 — Coremail. 授权码. It advertises SASL-IR falsely, so force the
+# non-inline path, and it wants the ID exchange.
+# ---------------------------------------------------------------------------
+[accounts.mail126]
+email = "ADDRESS@126.com"
+imap.server = "imaps://imap.126.com:993"
+imap.sasl.plain.username = "ADDRESS@126.com"
+imap.sasl.plain.password.command = "cat ~/.hermes/email/mail126.pass"
+imap.sasl-ir = false
+imap.id.auto = true
+smtp.server = "smtps://smtp.126.com:465"
+smtp.sasl.plain.username = "ADDRESS@126.com"
+smtp.sasl.plain.password.command = "cat ~/.hermes/email/mail126.pass"
+
+# ---------------------------------------------------------------------------
+# 163 — Coremail, and stricter than 126: it refuses AUTHENTICATE PLAIN on IMAP,
+# so use the LOGIN command instead. 授权码.
+# ---------------------------------------------------------------------------
+[accounts.mail163]
+email = "ADDRESS@163.com"
+imap.server = "imaps://imap.163.com:993"
+imap.sasl.login.username = "ADDRESS@163.com"
+imap.sasl.login.password.command = "cat ~/.hermes/email/mail163.pass"
+imap.sasl-ir = false
+imap.id.auto = true
+smtp.server = "smtps://smtp.163.com:465"
+smtp.sasl.plain.username = "ADDRESS@163.com"
+smtp.sasl.plain.password.command = "cat ~/.hermes/email/mail163.pass"
+
+# ---------------------------------------------------------------------------
+# Outlook / Microsoft 365 — a normal password or App Password. Microsoft has
+# been retiring basic auth; if this fails, this account needs OAuth instead.
+# ---------------------------------------------------------------------------
+[accounts.outlook]
+email = "ADDRESS@outlook.com"
+imap.server = "imaps://outlook.office365.com:993"
+imap.sasl.plain.username = "ADDRESS@outlook.com"
+imap.sasl.plain.password.command = "cat ~/.hermes/email/outlook.pass"
+smtp.server = "smtp://smtp.office365.com:587"
+smtp.starttls = true
+smtp.sasl.plain.username = "ADDRESS@outlook.com"
+smtp.sasl.plain.password.command = "cat ~/.hermes/email/outlook.pass"
+
+# ---------------------------------------------------------------------------
+# Self-hosted — fill in the real host, and STARTTLS vs implicit TLS.
+# ---------------------------------------------------------------------------
+[accounts.selfhost]
+email = "ADDRESS@EXAMPLE.COM"
+imap.server = "imaps://mail.EXAMPLE.COM:993"
+imap.sasl.plain.username = "ADDRESS@EXAMPLE.COM"
+imap.sasl.plain.password.command = "cat ~/.hermes/email/selfhost.pass"
+smtp.server = "smtps://mail.EXAMPLE.COM:465"
+smtp.sasl.plain.username = "ADDRESS@EXAMPLE.COM"
+smtp.sasl.plain.password.command = "cat ~/.hermes/email/selfhost.pass"

@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Store one mail account's password/authorization code without echoing it,
+# without putting it in shell history or in chat.
+#
+#   setpass gmail          # prompts, writes ~/.hermes/email/gmail.pass
+#   setpass --list         # show which accounts have a secret file
+#
+set -euo pipefail
+DIR="$HOME/.hermes/email"
+umask 077
+mkdir -p "$DIR"
+
+if [ "${1:-}" = "--list" ]; then
+    shopt -s nullglob
+    files=("$DIR"/*.pass)
+    if [ ${#files[@]} -eq 0 ]; then
+        echo "no password files yet in $DIR"
+    else
+        for f in "${files[@]}"; do
+            printf '%-14s %s bytes\n' "$(basename "$f" .pass)" "$(wc -c < "$f" | tr -d ' ')"
+        done
+    fi
+    exit 0
+fi
+
+name="${1:-}"
+if [ -z "$name" ]; then
+    echo "usage: setpass <account-name>" >&2
+    echo "       setpass --list" >&2
+    exit 2
+fi
+
+printf 'Secret for %s (input hidden): ' "$name" >&2
+IFS= read -rsp '' secret
+printf '\n' >&2
+
+if [ -z "$secret" ]; then
+    echo "empty input, nothing written" >&2
+    exit 1
+fi
+
+# Strip stray whitespace/newlines that people paste by accident.
+secret="$(printf '%s' "$secret" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+
+printf '%s' "$secret" > "$DIR/$name.pass"
+chmod 600 "$DIR/$name.pass"
+echo "wrote $DIR/$name.pass ($(wc -c < "$DIR/$name.pass" | tr -d ' ') bytes)"

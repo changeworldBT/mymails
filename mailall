@@ -1,0 +1,158 @@
+#!/usr/bin/env python3
+"""mailall — list envelopes across every configured himalaya account at once.
+
+himalaya targets one account per command (`-a NAME`). This fans that out over
+every account that has a secret file in ~/.hermes/email/, merges the results,
+and sorts them newest first, so "what's in my mail" is one command.
+
+  mailall                      newest 10 per account
+  mailall -n 30                newest 30 per account
+  mailall --unseen             only unread
+  mailall -a qq                one account
+  mailall invoice              pass a himalaya search query through
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import unicodedata
+from pathlib import Path
+
+SECRETS = Path.home() / ".hermes" / "email"
+HIMALAYA = shutil.which("himalaya") or str(Path.home() / ".local" / "bin" / "himalaya")
+TIMEOUT = 90
+
+
+def known_accounts() -> list[str]:
+    return sorted(p.stem for p in SECRETS.glob("*.pass"))
+
+
+def display_width(s: str) -> int:
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in s)
+
+
+def pad(s: str, width: int) -> str:
+    gap = width - display_width(s)
+    return s + " " * gap if gap > 0 else s
+
+
+def trunc(s: str, width: int) -> str:
+    if display_width(s) <= width:
+        return s
+    out, used = "", 0
+    for c in s:
+        w = 2 if unicodedata.east_asian_width(c) in "WF" else 1
+        if used + w > width - 1:
+            break
+        out += c
+        used += w
+    return out + "…"
+
+
+def fetch(account: str, limit: int, query: list[str]) -> tuple[list[dict], str | None]:
+    cmd = [HIMALAYA, "-a", account, "envelope", "list",
+           "-s", str(limit), "--json", *query]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return [], "timed out"
+    if proc.returncode != 0:
+        msg = (proc.stderr or proc.stdout or "").strip().splitlines()
+        return [], (msg[0] if msg else f"exit {proc.returncode}")
+    raw = proc.stdout.strip()
+    if not raw:
+        return [], "empty output"
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return [], "unparseable JSON"
+    if isinstance(data, dict):
+        data = data.get("envelopes") or data.get("data") or []
+    return [e for e in data if isinstance(e, dict)], None
+
+
+def sender(env: dict) -> str:
+    frm = env.get("from") or []
+    if not frm:
+        return "(unknown)"
+    first = frm[0]
+    if isinstance(first, dict):
+        return first.get("name") or first.get("email") or "(unknown)"
+    return str(first)
+
+
+def is_unseen(env: dict) -> bool:
+    flags = env.get("flags") or []
+    names = [f.get("name") if isinstance(f, dict) else str(f) for f in flags]
+    return not any((n or "").lower().lstrip("\\") == "seen" for n in names)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(add_help=True, description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("-n", "--limit", type=int, default=10, help="envelopes per account (default 10)")
+    ap.add_argument("-a", "--account", help="only this account")
+    ap.add_argument("--unseen", action="store_true", help="only unread messages")
+    ap.add_argument("query", nargs="*", help="himalaya search query, passed through")
+    args = ap.parse_args()
+
+    accounts = known_accounts()
+    if args.account:
+        accounts = [a for a in accounts if a == args.account]
+    if not accounts:
+        print("No accounts with credentials yet.")
+        print(f"Add one with:  {SECRETS}/setpass <account>")
+        return 1
+
+    rows: list[tuple] = []
+    problems: list[tuple[str, str]] = []
+    for acct in accounts:
+        envs, err = fetch(acct, args.limit, args.query)
+        if err:
+            problems.append((acct, err))
+            continue
+        for env in envs:
+            rows.append((acct, env))
+
+    if args.unseen:
+        rows = [r for r in rows if is_unseen(r[1])]
+
+    rows.sort(key=lambda r: (r[1].get("date") or ""), reverse=True)
+
+    if not rows and not problems:
+        print("No messages matched.")
+        return 0
+
+    w_acct = max([display_width(a) for a in accounts] + [7])
+    c_date, c_from, c_subj = 16, 22, 58
+    header = (pad("ACCOUNT", w_acct) + "  " + pad("DATE", c_date) + "  "
+              + pad("FROM", c_from) + "  " + "SUBJECT")
+    print(header)
+    print("─" * (display_width(header) + 2))
+
+    for acct, env in rows:
+        date = (env.get("date") or "")[:16].replace("T", " ")
+        mark = "" if is_unseen(env) else " "
+        unread = "" if not is_unseen(env) else "•"
+        subj = (env.get("subject") or "(no subject)")
+        if env.get("has-attachment"):
+            subj += "  [att]"
+        print(pad(acct, w_acct) + "  " + pad(date, c_date) + "  "
+              + pad(trunc(sender(env), c_from), c_from) + "  " + unread + trunc(subj, c_subj)
+              + "   #" + str(env.get("id", "?")))
+
+    print()
+    unread_n = sum(1 for _, e in rows if is_unseen(e))
+    print(f"{len(rows)} message(s), {unread_n} unread, across {len(accounts)} account(s)"
+          + (f" — dot = unread" if unread_n else ""))
+    for acct, err in problems:
+        print(f"! {acct}: {err}", file=sys.stderr)
+    return 0 if rows or not problems else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
