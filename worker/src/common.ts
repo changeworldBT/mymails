@@ -727,13 +727,14 @@ export const handleMailListQuery = async (
     if (offset == null || offset == undefined || offset < 0) return c.text(msgs.InvalidOffsetMsg, 400);
     const orderClause = orderBy || 'id desc';
     const resultsQuery = `${query} order by ${orderClause} limit ? offset ?`;
-    const { results } = await c.env.DB.prepare(resultsQuery).bind(
-        ...params, limit, offset
-    ).all();
+    // mymails: list + count in parallel instead of two sequential D1 round trips
+    const [{ results }, count] = await Promise.all([
+        c.env.DB.prepare(resultsQuery).bind(...params, limit, offset).all(),
+        offset == 0
+            ? c.env.DB.prepare(countQuery).bind(...params).first("count")
+            : Promise.resolve(0),
+    ]);
     const resolvedResults = await resolveRawEmailList(results);
-    const count = offset == 0 ? await c.env.DB.prepare(
-        countQuery
-    ).bind(...params).first("count") : 0;
     return c.json({ results: resolvedResults, count });
 }
 

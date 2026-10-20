@@ -14,7 +14,7 @@ const API_BASE = APP_CONFIG.API_BASE || "";
 const {
     loading, auth, jwt, settings, openSettings,
     userOpenSettings, userSettings, announcement,
-    showAuth, adminAuth, showAdminAuth, userJwt
+    showAuth, adminAuth, showAdminAuth, userJwt, browserFingerprint
 } = useGlobalState();
 
 const instance = axios.create({
@@ -37,14 +37,15 @@ const apiFetch = async (path, options = {}) => {
     if (showLoading) loading.value = true;
     try {
         // Get browser fingerprint for request tracking
-        const fingerprint = await getFingerprint();
+        // mymails: never block a request on FingerprintJS; use cached value or compute in background
+        const fingerprint = browserFingerprint.value || (getFingerprint(), '');
 
         // Skip auth headers whose value is empty / "undefined" / contains
         // control chars (otherwise axios throws "Invalid character in header
         // content" before the request is sent — see issue #1000).
         const headers = {
             'x-lang': i18n.global.locale.value,
-            'x-fingerprint': fingerprint,
+            ...(fingerprint ? { 'x-fingerprint': fingerprint } : {}),
             'Content-Type': 'application/json',
         };
         const userTokenHeader = safeHeaderValue(options.userJwt || userJwt.value);
@@ -162,7 +163,27 @@ const getSettings = async () => {
         if (typeof jwt.value != 'string' || jwt.value.trim() === '' || jwt.value === 'undefined') {
             return "";
         }
-        const res = await apiFetch("/api/settings");;
+        // mymails: optimistic render - the address is inside the JWT, so show the mailbox
+        // (and let it start loading mails) in parallel with /api/settings instead of after it.
+        let optimistic = false;
+        if (!settings.value.address) {
+            try {
+                const payload = JSON.parse(decodeURIComponent(escape(atob(
+                    jwt.value.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+                ))));
+                if (typeof payload?.address === 'string' && payload.address) {
+                    settings.value = { ...settings.value, address: payload.address, fetched: true };
+                    optimistic = true;
+                }
+            } catch (e) { /* ignore, fall back to server */ }
+        }
+        let res;
+        try {
+            res = await apiFetch("/api/settings", { showLoading: false });
+        } catch (error) {
+            if (optimistic) settings.value = { fetched: true };
+            throw error;
+        }
         settings.value = {
             address: res["address"],
             auto_reply: res["auto_reply"],

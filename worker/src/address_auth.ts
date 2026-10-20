@@ -4,6 +4,11 @@ import { Jwt } from 'hono/utils/jwt';
 
 import i18n from './i18n';
 
+const ADDRESS_CACHE_TTL_MS = 60 * 1000;
+const validatedAddressCache = new Map<string, number>();
+
+export const invalidateAddressCache = (): void => validatedAddressCache.clear();
+
 export const validateAddressPayload = async (
     c: Context<HonoCustomType>,
     payload: Record<string, unknown>,
@@ -15,9 +20,19 @@ export const validateAddressPayload = async (
     ) return null;
     const addressId = Number(address_id);
     if (!Number.isSafeInteger(addressId) || addressId <= 0) return null;
+    // mymails: per-isolate cache of validated (id, name) pairs, saves one D1 round trip per request
+    const cacheKey = `${addressId}:${address}`;
+    const cachedAt = validatedAddressCache.get(cacheKey);
+    if (cachedAt && Date.now() - cachedAt < ADDRESS_CACHE_TTL_MS) {
+        return { address, address_id: addressId };
+    }
     const exists = await c.env.DB.prepare(
         `SELECT id FROM address WHERE id = ? AND name = ?`
     ).bind(addressId, address).first<number>('id');
+    if (exists) {
+        if (validatedAddressCache.size > 5000) validatedAddressCache.clear();
+        validatedAddressCache.set(cacheKey, Date.now());
+    }
     return exists ? { address, address_id: addressId } : null;
 };
 

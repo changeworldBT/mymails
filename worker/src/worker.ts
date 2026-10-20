@@ -49,6 +49,13 @@ app.use('/*', async (c, next) => {
 		return c.env.ASSETS.fetch(url);
 	}
 
+	// mymails: serve GET reads through a D1 session so they can hit the nearest read replica
+	// (requires read replication enabled on the database; falls back to primary otherwise)
+	if (c.req.method === "GET" && typeof (c.env.DB as any)?.withSession === "function"
+		&& !c.req.path.startsWith("/admin/")) {
+		c.env = { ...c.env, DB: (c.env.DB as any).withSession("first-unconstrained") };
+	}
+
 	// save language in context
 	const lang = c.req.raw.headers.get("x-lang");
 	if (lang) { c.set("lang", lang); }
