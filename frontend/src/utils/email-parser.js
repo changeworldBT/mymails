@@ -1,5 +1,9 @@
 import PostalMime from 'postal-mime';
 
+// mymails: start downloading/compiling the wasm parser as soon as this module loads,
+// in parallel with the mail list request, instead of after it returns.
+const wasmParserPromise = import('mail-parser-wasm').catch(() => null);
+
 function humanFileSize(size) {
     const i = size === 0 ? 0 : Math.floor(Math.log(size) / Math.log(1024));
     return parseFloat((size / Math.pow(1024, i)).toFixed(2)) + ' ' + ['B', 'KB', 'MB', 'GB', 'TB'][i];
@@ -9,7 +13,7 @@ export async function processItem(item) {
     // Try to parse the email using mail-parser-wasm
     item.originalSource = item.source;
     try {
-        const { parse_message } = await import('mail-parser-wasm');
+        const { parse_message } = (await wasmParserPromise) || await import('mail-parser-wasm');
         const parsedEmail = parse_message(item.raw);
         item.source = parsedEmail.sender || item.source;
         item.subject = parsedEmail.subject || '';

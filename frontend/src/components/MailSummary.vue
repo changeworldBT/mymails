@@ -1,16 +1,11 @@
 <script setup>
 import { computed } from 'vue';
-import { useThemeVars } from 'naive-ui';
 import { useGlobalState } from '../store';
 import { utcToLocalDate } from '../utils';
 import AiExtractInfo from './AiExtractInfo.vue';
 import { useScopedI18n } from '@/i18n/app';
 
 const { useUTCDate, isDark } = useGlobalState();
-const themeVars = useThemeVars();
-const mutedTextColor = computed(() => isDark.value
-  ? themeVars.value.textColor3
-  : `color-mix(in srgb, ${themeVars.value.textColor3} 65%, ${themeVars.value.textColor2})`);
 const { t } = useScopedI18n('components.MailContentRenderer');
 
 const props = defineProps({
@@ -21,111 +16,181 @@ const props = defineProps({
 });
 
 const receivedAt = computed(() => new Date(`${props.mail.created_at} UTC`));
+
+// sender display: "Name <a@b.c>" -> name + address
+const sender = computed(() => {
+  const raw = (props.mail.source || '').trim();
+  const m = raw.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+  if (m) return { name: m[1].trim() || m[2], addr: m[2] };
+  return { name: raw || '—', addr: '' };
+});
+
+const AVATAR_COLORS = ['#4f46e5', '#0891b2', '#059669', '#d97706', '#db2777', '#7c3aed', '#dc2626', '#2563eb'];
+const avatarColor = computed(() => {
+  const s = sender.value.addr || sender.value.name;
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+});
+const initial = computed(() => (sender.value.name.replace(/[^\p{L}\p{N}]/gu, '')[0] || '?').toUpperCase());
+
+const preview = computed(() => (props.mail.text || '').replace(/\s+/g, ' ').trim());
+
+const c = computed(() => isDark.value ? {
+  sender: '#a5b4fc', addr: '#8b93b8', toBg: 'rgba(16,185,129,.14)', to: '#6ee7b7',
+  subject: '#f3f4f6', preview: '#9ca3af', date: '#9ca3af', dateBg: 'rgba(255,255,255,.06)',
+} : {
+  sender: '#4338ca', addr: '#6b7280', toBg: '#ecfdf5', to: '#047857',
+  subject: '#111827', preview: '#6b7280', date: '#6b7280', dateBg: '#f3f4f6',
+});
 </script>
 
 <template>
-  <div class="mail-summary">
-    <n-flex align="center" :wrap="false" :size="6">
-      <div class="mail-summary-sender" :title="mail.source">
-        <span v-if="enableMailReadStatus && mail.is_unread === 1" class="mail-summary-unread-dot" />
-        <n-ellipsis>
-          <n-text v-if="showEMailTo" depth="3" class="mail-summary-muted">{{ t('from') }}: </n-text><n-text depth="2">{{ mail.source || '—' }}</n-text>
-        </n-ellipsis>
+  <div class="ms">
+    <div class="ms-avatar" :style="{ background: avatarColor }">{{ initial }}</div>
+    <div class="ms-body">
+      <div class="ms-row">
+        <span v-if="enableMailReadStatus && mail.is_unread === 1" class="ms-unread" />
+        <span class="ms-sender" :title="mail.source">{{ sender.name }}</span>
+        <span v-if="sender.addr && sender.addr !== sender.name" class="ms-addr">{{ sender.addr }}</span>
+        <span class="ms-date" :title="utcToLocalDate(mail.created_at, useUTCDate)">
+          <n-time v-if="!Number.isNaN(receivedAt.getTime())" :time="receivedAt"
+            :time-zone="useUTCDate ? 'UTC' : undefined" format="MM/dd HH:mm" />
+          <template v-else>{{ utcToLocalDate(mail.created_at, useUTCDate) }}</template>
+        </span>
       </div>
-      <n-text depth="3" class="mail-summary-date mail-summary-muted" :title="utcToLocalDate(mail.created_at, useUTCDate)">
-        <n-time v-if="!Number.isNaN(receivedAt.getTime())" :time="receivedAt"
-          :time-zone="useUTCDate ? 'UTC' : undefined" format="yy/MM/dd" />
-        <template v-else>{{ utcToLocalDate(mail.created_at, useUTCDate) }}</template>
-      </n-text>
-    </n-flex>
-    <div v-if="showEMailTo" class="mail-summary-recipient">
-      <n-ellipsis>
-        <n-text depth="3" class="mail-summary-muted">{{ t('to') }}: </n-text><n-text depth="2">{{ mail.address }}</n-text>
-      </n-ellipsis>
+      <div class="ms-subject" :class="{ 'ms-subject-unread': enableMailReadStatus && mail.is_unread === 1 }"
+        :title="`ID: ${mail.id}\n${mail.subject || ''}`">{{ mail.subject || '（无主题）' }}</div>
+      <div v-if="preview && previewLineClamp > 0" class="ms-preview" :style="{ '-webkit-line-clamp': previewLineClamp }">
+        {{ preview }}
+      </div>
+      <div v-if="showEMailTo" class="ms-to-row">
+        <span class="ms-to">{{ t('to') }} {{ mail.address }}</span>
+      </div>
+      <AiExtractInfo :metadata="mail.metadata" compact />
     </div>
-    <div class="mail-summary-subject" :title="`ID: ${mail.id}\n${mail.subject || ''}`">
-      <n-ellipsis><n-text strong depth="1">{{ mail.subject || '—' }}</n-text></n-ellipsis>
-    </div>
-    <div v-if="mail.text && previewLineClamp > 0" class="mail-summary-preview">
-      <n-ellipsis :line-clamp="previewLineClamp" :tooltip="false"><n-text depth="3" class="mail-summary-muted">{{ mail.text }}</n-text></n-ellipsis>
-    </div>
-    <AiExtractInfo :metadata="mail.metadata" compact />
   </div>
 </template>
 
 <style scoped>
-.mail-summary {
+.ms {
+  display: flex;
+  gap: 12px;
   min-width: 0;
   width: 100%;
-  line-height: 20px;
+  text-align: left;
 }
 
-.mail-summary-sender {
+.ms-avatar {
+  flex: 0 0 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 600;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.ms-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ms-row {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  flex: 1;
-  font-size: 13px;
+  line-height: 20px;
 }
 
-.mail-summary :deep(.n-ellipsis) {
+.ms-sender {
+  font-weight: 600;
+  font-size: 14px;
+  color: v-bind('c.sender');
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
-.mail-summary-sender :deep(.n-ellipsis) {
-  flex: 1;
+.ms-addr {
+  font-size: 12px;
+  color: v-bind('c.addr');
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
-.mail-summary-recipient {
-  margin-top: 4px;
+.ms-date {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: v-bind('c.date');
+  background: v-bind('c.dateBg');
+  padding: 0 8px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
 }
 
-.mail-summary-recipient :deep(.n-ellipsis) {
-  display: block;
-}
-
-.mail-summary-subject {
+.ms-subject {
+  margin-top: 3px;
   font-size: 15px;
-  margin-top: 4px;
+  font-weight: 600;
+  color: v-bind('c.subject');
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.mail-summary-muted {
-  color: v-bind(mutedTextColor);
+.ms-subject-unread {
+  font-weight: 700;
 }
 
-.mail-summary-preview {
+.ms-preview {
+  margin-top: 3px;
   font-size: 13px;
-  line-height: 18px;
-  margin-top: 8px;
-}
-
-.mail-summary-preview :deep(.n-ellipsis) {
+  line-height: 19px;
+  color: v-bind('c.preview');
   display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   overflow-wrap: anywhere;
 }
 
-.mail-summary-recipient,
-.mail-summary-date {
-  font-size: 12px;
-}
-
-.mail-summary-unread-dot {
-  flex: 0 0 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: v-bind('themeVars.infoColor');
-}
-
-.mail-summary :deep(.ai-extract-info) {
-  margin: 2px 0 0;
-}
-
-.mail-summary :deep(.n-tag) {
-  max-width: 100%;
-}
-
-.mail-summary :deep(.n-tag__content) {
+.ms-to-row {
+  margin-top: 6px;
   min-width: 0;
+}
+
+.ms-to {
+  display: inline-block;
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: v-bind('c.to');
+  background: v-bind('c.toBg');
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ms-unread {
+  flex: 0 0 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3b82f6;
+}
+
+.ms :deep(.ai-extract-info) {
+  margin: 4px 0 0;
 }
 </style>

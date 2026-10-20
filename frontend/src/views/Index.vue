@@ -34,11 +34,11 @@ const { t } = useScopedI18n('views.Index')
 
 const fetchMailData = async (limit, offset) => {
   if (mailIdQuery.value > 0) {
-    const singleMail = await api.fetch(`/api/mail/${mailIdQuery.value}`);
+    const singleMail = await api.fetch(`/api/mail/${mailIdQuery.value}`, { showLoading: false });
     if (singleMail) return { results: [singleMail], count: 1 };
     return { results: [], count: 0 };
   }
-  return await api.fetch(`/api/mails?limit=${limit}&offset=${offset}`);
+  return await api.fetch(`/api/mails?limit=${limit}&offset=${offset}`, { showLoading: false });
 };
 
 const deleteMail = async (curMailId) => {

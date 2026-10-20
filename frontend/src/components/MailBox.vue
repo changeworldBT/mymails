@@ -183,7 +183,7 @@ const setupAutoRefresh = async (autoRefresh) => {
   if (autoRefresh) {
     clearInterval(timer.value);
     timer.value = setInterval(async () => {
-      if (loading.value) return;
+      if (loading.value || listLoading.value) return;
       autoRefreshInterval.value--;
       if (autoRefreshInterval.value <= 0) {
         autoRefreshInterval.value = configAutoRefreshInterval.value;
@@ -206,15 +206,29 @@ watch([page, pageSize], async ([page, pageSize], [oldPage, oldPageSize]) => {
   }
 })
 
+// mymails: parsed-mail cache so auto refresh / paging never re-parses the same raw mail
+const parsedCache = new Map();
+const parseCached = async (item) => {
+  const key = `${item.id}:${item.raw?.length || 0}`;
+  const hit = parsedCache.get(key);
+  if (hit) return { ...hit, checked: false, is_unread: item.is_unread };
+  const parsed = await processItem(item);
+  if (parsedCache.size > 300) parsedCache.clear();
+  parsedCache.set(key, parsed);
+  return parsed;
+};
+const listLoading = ref(false);
+
 const refresh = async () => {
+  if (listLoading.value) return;
+  listLoading.value = true;
   try {
     const { results, count: totalCount } = await props.fetchMailData(
       pageSize.value, (page.value - 1) * pageSize.value
     );
-    loading.value = true;
     rawData.value = await Promise.all(results.map(async (item) => {
       item.checked = false;
-      return await processItem(item);
+      return await parseCached(item);
     }));
     if (totalCount > 0) {
       count.value = totalCount;
@@ -227,7 +241,7 @@ const refresh = async () => {
     message.error(error.message || "error");
     console.error(error);
   } finally {
-    loading.value = false;
+    listLoading.value = false;
   }
 };
 
@@ -426,6 +440,12 @@ onBeforeUnmount(() => {
         </template>
         <template #1>
           <div class="mail-list-scroll mail-list-compact">
+            <div v-if="listLoading && data.length === 0" class="mail-skeleton">
+              <div v-for="i in 5" :key="i" class="mail-skeleton-item">
+                <n-skeleton text style="width: 45%" /><n-skeleton text style="width: 75%" /><n-skeleton text :repeat="1" style="width: 90%" />
+              </div>
+            </div>
+            <div v-if="listLoading && data.length > 0" class="mail-refresh-bar" />
             <n-list hoverable clickable>
               <n-list-item v-for="row in data" v-bind:key="row.id" @click="() => clickRow(row)"
                 :class="[mailItemClass(row), { 'mail-list-unread': enableMailReadStatus && row.is_unread === 1 }]">
@@ -486,7 +506,13 @@ onBeforeUnmount(() => {
         </template>
       </n-split>
       <div v-else class="mail-list-scroll mail-list-compact">
-        <n-list hoverable clickable>
+        <div v-if="listLoading && data.length === 0" class="mail-skeleton">
+              <div v-for="i in 5" :key="i" class="mail-skeleton-item">
+                <n-skeleton text style="width: 45%" /><n-skeleton text style="width: 75%" /><n-skeleton text :repeat="1" style="width: 90%" />
+              </div>
+            </div>
+            <div v-if="listLoading && data.length > 0" class="mail-refresh-bar" />
+            <n-list hoverable clickable>
           <n-list-item v-for="row in data" v-bind:key="row.id" @click="() => clickRow(row)"
             :class="[mailItemClass(row), { 'mail-list-unread': enableMailReadStatus && row.is_unread === 1 }]">
             <template #prefix v-if="multiActionMode">
@@ -518,7 +544,13 @@ onBeforeUnmount(() => {
           :placeholder="t('keywordQueryTip')" size="small" clearable />
       </div>
       <div class="mail-list-scroll mail-list-compact">
-        <n-list hoverable clickable>
+        <div v-if="listLoading && data.length === 0" class="mail-skeleton">
+              <div v-for="i in 5" :key="i" class="mail-skeleton-item">
+                <n-skeleton text style="width: 45%" /><n-skeleton text style="width: 75%" /><n-skeleton text :repeat="1" style="width: 90%" />
+              </div>
+            </div>
+            <div v-if="listLoading && data.length > 0" class="mail-refresh-bar" />
+            <n-list hoverable clickable>
           <n-list-item v-for="row in data" v-bind:key="row.id" @click="() => clickRow(row)"
             :class="{ 'mail-list-unread': enableMailReadStatus && row.is_unread === 1 }">
             <MailSummary :mail="row" :showEMailTo="showEMailTo" :enableMailReadStatus="enableMailReadStatus"
@@ -639,5 +671,29 @@ pre {
 
 .split-handle:hover .split-handle__grip {
   background-color: var(--n-resize-trigger-color-hover);
+}
+
+.mail-skeleton {
+  padding: 8px 12px;
+}
+
+.mail-skeleton-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(128, 128, 128, .12);
+}
+
+.mail-refresh-bar {
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #6366f1, transparent);
+  background-size: 200% 100%;
+  animation: mail-refresh 1s linear infinite;
+}
+
+@keyframes mail-refresh {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
 }
 </style>
