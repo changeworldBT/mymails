@@ -1,0 +1,40 @@
+# mymails production config (no secrets here; JWT_SECRET / ADMIN_PASSWORDS are Worker secrets)
+name = "fragrant-rice-7e99"
+main = "src/worker.ts"
+compatibility_date = "2026-03-26"
+compatibility_flags = [ "nodejs_compat" ]
+keep_vars = false
+workers_dev = false
+
+routes = [
+  { pattern = "apimail.mymails.cc.cd", custom_domain = true },
+]
+
+# Run the worker close to the D1 database
+[placement]
+mode = "smart"
+
+[vars]
+DEFAULT_LANG = "zh"
+TITLE = "MyMails 临时邮箱"
+PREFIX = ""
+DOMAINS = ["mymails.cc.cd"]
+DEFAULT_DOMAINS = ["mymails.cc.cd"]
+USER_ROLES = [
+  { domains = ["mymails.cc.cd"], role = "vip", prefix = "" },
+  { domains = ["mymails.cc.cd"], role = "admin", prefix = "" },
+]
+NO_LIMIT_SEND_ROLE = "admin"
+BLACK_LIST = ""
+ENABLE_USER_CREATE_EMAIL = true
+ENABLE_USER_DELETE_EMAIL = true
+ENABLE_AUTO_REPLY = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "mymails-apac"
+database_id = "c938bcf6-5d9e-4253-bee5-366c20e0c0ed"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "d5c3fb60e1314759ab99f458b30582f7"
