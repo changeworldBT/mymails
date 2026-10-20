@@ -70,6 +70,10 @@ const apiFetch = async (path, options = {}) => {
         if (ErrorCode.isSiteAuthError(response)) {
             showAuth.value = true;
         }
+        if (response.status === 401 && path.startsWith('/user_api/') && userTokenHeader && !options.userJwt) {
+            // mymails: server rejected the stored user token -> forget it so the UI shows the login form
+            userJwt.value = '';
+        }
         if (response.status >= 300) {
             throw new Error(`[${response.status}]: ${response.data?.message || response.data}`);
         }
@@ -184,6 +188,14 @@ const getUserOpenSettings = async (message) => {
 const getUserSettings = async (message) => {
     try {
         if (!userJwt.value) return;
+        // mymails: drop a locally expired user token instead of spamming 401 "please log in again"
+        try {
+            const payload = JSON.parse(atob(userJwt.value.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+            if (payload?.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+                userJwt.value = '';
+                return;
+            }
+        } catch (e) { /* not decodable, let the server decide */ }
         const res = await api.fetch("/user_api/settings")
         Object.assign(userSettings.value, res)
         // auto refresh user jwt
@@ -200,6 +212,11 @@ const getUserSettings = async (message) => {
             }
         }
     } catch (error) {
+        if (String(error.message || '').includes('401')) {
+            // stale/invalid user token: clear it silently so the user is simply logged out of the user center
+            userJwt.value = '';
+            return;
+        }
         message?.error(error.message || "error");
     } finally {
         userSettings.value.fetched = true;
