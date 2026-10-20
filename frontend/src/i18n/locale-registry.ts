@@ -1,17 +1,4 @@
-import {
-  dateDeDE,
-  dateEnUS,
-  dateEsAR,
-  dateJaJP,
-  datePtBR,
-  dateZhCN,
-  deDE,
-  enUS,
-  esAR,
-  jaJP,
-  ptBR,
-  zhCN,
-} from 'naive-ui'
+import { dateEnUS, dateZhCN, enUS, zhCN } from 'naive-ui'
 
 import type { NDateLocale, NLocale } from 'naive-ui'
 
@@ -42,34 +29,6 @@ export const LOCALE_REGISTRY = [
     browserMatches: ['en'],
     naive: { locale: enUS, dateLocale: dateEnUS },
     turnstileLocale: 'en',
-  },
-  {
-    locale: 'es',
-    label: 'Español',
-    browserMatches: ['es'],
-    naive: { locale: esAR, dateLocale: dateEsAR },
-    turnstileLocale: 'es',
-  },
-  {
-    locale: 'pt-BR',
-    label: 'Português (Brasil)',
-    browserMatches: ['pt'],
-    naive: { locale: ptBR, dateLocale: datePtBR },
-    turnstileLocale: 'pt-BR',
-  },
-  {
-    locale: 'ja',
-    label: '日本語',
-    browserMatches: ['ja'],
-    naive: { locale: jaJP, dateLocale: dateJaJP },
-    turnstileLocale: 'ja',
-  },
-  {
-    locale: 'de',
-    label: 'Deutsch',
-    browserMatches: ['de'],
-    naive: { locale: deDE, dateLocale: dateDeDE },
-    turnstileLocale: 'de',
   },
 ] as const satisfies readonly LocaleRegistryEntry[]
 

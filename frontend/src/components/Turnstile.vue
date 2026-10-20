@@ -27,17 +27,36 @@ const rerenderTurnstile = () => {
     return turnstileRenderQueue
 }
 
+// mymails: load the Turnstile script lazily, only when a site key is configured,
+// so it never blocks first paint (challenges.cloudflare.com is slow in some regions)
+let turnstileScriptPromise = null
+const loadTurnstileScript = () => {
+    if (window.turnstile) return Promise.resolve()
+    if (!turnstileScriptPromise) {
+        turnstileScriptPromise = new Promise((resolve, reject) => {
+            const s = document.createElement('script')
+            s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+            s.async = true
+            s.onload = () => resolve()
+            s.onerror = (e) => { turnstileScriptPromise = null; reject(e) }
+            document.head.appendChild(s)
+        })
+    }
+    return turnstileScriptPromise
+}
+
 const checkCfTurnstile = async (remove) => {
     if (!openSettings.value.cfTurnstileSiteKey) return;
     turnstileLoading.value = true;
     try {
+        await loadTurnstileScript();
         let container = document.getElementById(containerId);
         let count = 100;
         while (!container && count-- > 0) {
             container = document.getElementById(containerId);
             await new Promise(r => setTimeout(r, 10));
         }
-        count = 100;
+        count = 500;
         while (!window.turnstile && count-- > 0) {
             await new Promise(r => setTimeout(r, 10));
         }

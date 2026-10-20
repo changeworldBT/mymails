@@ -12,6 +12,18 @@ import wasm from "vite-plugin-wasm";
 export default defineConfig({
   build: {
     outDir: './dist',
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        // mymails: split long-lived vendor code so it stays cached across releases
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('naive-ui') || id.includes('vueuc') || id.includes('vooks') || id.includes('css-render') || id.includes('date-fns') || id.includes('seemly') || id.includes('evtd') || id.includes('treemate')) return 'vendor-naive'
+          if (id.includes('@wangeditor') || id.includes('slate') || id.includes('prismjs') || id.includes('snabbdom')) return 'vendor-editor'
+          if (/node_modules\/(\.pnpm\/)?(vue|@vue|vue-router|vue-i18n|@intlify|@vueuse|@unhead)/.test(id)) return 'vendor-vue'
+        },
+      },
+    },
   },
   plugins: [
     vue(),
